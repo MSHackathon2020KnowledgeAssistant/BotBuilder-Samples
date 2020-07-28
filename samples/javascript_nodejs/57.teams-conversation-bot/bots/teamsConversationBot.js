@@ -4,12 +4,9 @@
 const {
     TurnContext,
     MessageFactory,
-    TeamsInfo,
     TeamsActivityHandler,
     CardFactory,
-    ActionTypes
 } = require('botbuilder');
-const TextEncoder = require('util').TextEncoder;
 
 class TeamsConversationBot extends TeamsActivityHandler {
     constructor() {
@@ -17,165 +14,111 @@ class TeamsConversationBot extends TeamsActivityHandler {
         this.onMessage(async (context, next) => {
             TurnContext.removeRecipientMention(context.activity);
             const text = context.activity.text.trim().toLocaleLowerCase();
-            if (text.includes('mention')) {
-                await this.mentionActivityAsync(context);
-            } else if (text.includes('update')) {
-                await this.cardActivityAsync(context, true);
-            } else if (text.includes('delete')) {
-                await this.deleteCardActivityAsync(context);
-            } else if (text.includes('message')) {
-                await this.messageAllMembersAsync(context);
-            } else if (text.includes('who')) {
-                await this.getSingleMember(context);
+            if (text.includes('analyze')) {
+                await this.analyzeMeetingAsync(context);
             } else {
-                await this.cardActivityAsync(context, false);
+                await this.sendWelcomeCardAsync(context);
             }
         });
 
         this.onMembersAddedActivity(async (context, next) => {
             context.activity.membersAdded.forEach(async (teamMember) => {
                 if (teamMember.id !== context.activity.recipient.id) {
-                    await context.sendActivity(`Welcome to the team ${ teamMember.givenName } ${ teamMember.surname }`);
+                    await context.sendActivity(`Welcome to the team ${teamMember.givenName} ${teamMember.surname}`);
                 }
             });
             await next();
         });
     }
 
-    async cardActivityAsync(context, isUpdate) {
-        const cardActions = [
-            {
-                type: ActionTypes.MessageBack,
-                title: 'Message all members',
-                value: null,
-                text: 'MessageAllMembers'
-            },
-            {
-                type: ActionTypes.MessageBack,
-                title: 'Who am I?',
-                value: null,
-                text: 'whoami'
-            },
-            {
-                type: ActionTypes.MessageBack,
-                title: 'Delete card',
-                value: null,
-                text: 'Delete'
-            }
-        ];
-
-        if (isUpdate) {
-            await this.sendUpdateCard(context, cardActions);
-        } else {
-            await this.sendWelcomeCard(context, cardActions);
-        }
-    }
-
-    async sendUpdateCard(context, cardActions) {
-        const data = context.activity.value;
-        data.count += 1;
-        cardActions.push({
-            type: ActionTypes.MessageBack,
-            title: 'Update Card',
-            value: data,
-            text: 'UpdateCardAction'
+    async analyzeMeetingAsync(context) {
+        const card = CardFactory.adaptiveCard({
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.0",
+            "body": [
+                {
+                    "type": "Container",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "OCR",
+                            "weight": "bolder",
+                            "size": "medium",
+                            "color": "accent"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Optical Character Recognition",
+                            "color": "good"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Optical character recognition or optical character reader (OCR) is the electronic or mechanical conversion of images of typed, handwritten or printed text into machine-encoded text.",
+                            "wrap": true
+                        },
+                    ]
+                },
+                {
+                    "type": "Container",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "OCR",
+                            "weight": "bolder",
+                            "size": "medium",
+                            "color": "accent"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Office for Civil Rights",
+                            "color": "good"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "The Office for Civil Rights (OCR) is a sub-agency of the U.S. Department of Education that is primarily focused on enforcing civil rights laws prohibiting schools from engaging in discrimination on the basis of race, color, national origin, sex, disability, age, or membership in patriotic youth organizations.",
+                            "wrap": true
+                        },
+                    ]
+                },
+                {
+                    "type": "Container",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "Form Recognizer",
+                            "weight": "bolder",
+                            "size": "medium",
+                            "color": "accent"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Azure Form Recognizer",
+                            "color": "good"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "Form Recognizer is part of Azure Cognitive Services, backed by Azure infrastructure and enterprise-grade security, availability, compliance, and manageability.",
+                            "wrap": true
+                        },
+                    ]
+                },
+            ],
+            "actions": [
+                {
+                    "type": "Action.OpenUrl",
+                    "title": "See More",
+                    "url": "http://23.96.31.42:8080/?meetingId=23"
+                }
+            ]
         });
-        const card = CardFactory.heroCard(
-            'Updated card',
-            `Update count: ${ data.count }`,
-            null,
-            cardActions
-        );
-        card.id = context.activity.replyToId;
-        const message = MessageFactory.attachment(card);
-        message.id = context.activity.replyToId;
-        await context.updateActivity(message);
-    }
 
-    async sendWelcomeCard(context, cardActions) {
-        const initialValue = {
-            count: 0
-        };
-        cardActions.push({
-            type: ActionTypes.MessageBack,
-            title: 'Update Card',
-            value: initialValue,
-            text: 'UpdateCardAction'
-        });
-        const card = CardFactory.heroCard(
-            'Welcome card',
-            '',
-            null,
-            cardActions
-        );
-        await context.sendActivity(MessageFactory.attachment(card));
-    }
-
-    async getSingleMember(context) {
-        var member;
-        try {
-            member = await TeamsInfo.getMember(context, context.activity.from.id);
-        } catch (e) {
-            if (e.code === 'MemberNotFoundInConversation') {
-                context.sendActivity(MessageFactory.text('Member not found.'));
-                return;
-            } else {
-                console.log(e);
-                throw e;
-            }
-        }
-        const message = MessageFactory.text(`You are: ${ member.name }`);
+        const message = MessageFactory.attachment(card, "Here are the top keywords from your previous meeting.");
         await context.sendActivity(message);
     }
 
-    async mentionActivityAsync(context) {
-        const mention = {
-            mentioned: context.activity.from,
-            text: `<at>${ new TextEncoder().encode(context.activity.from.name) }</at>`,
-            type: 'mention'
-        };
-
-        const replyActivity = MessageFactory.text(`Hi ${ mention.text }`);
-        replyActivity.entities = [mention];
-        await context.sendActivity(replyActivity);
-    }
-
-    async deleteCardActivityAsync(context) {
-        await context.deleteActivity(context.activity.replyToId);
-    }
-
-    // If you encounter permission-related errors when sending this message, see
-    // https://aka.ms/BotTrustServiceUrl
-    async messageAllMembersAsync(context) {
-        const members = await this.getPagedMembers(context);
-
-        members.forEach(async (teamMember) => {
-            const message = MessageFactory.text(`Hello ${ teamMember.givenName } ${ teamMember.surname }. I'm a Teams conversation bot.`);
-
-            var ref = TurnContext.getConversationReference(context.activity);
-            ref.user = teamMember;
-
-            await context.adapter.createConversation(ref,
-                async (t1) => {
-                    const ref2 = TurnContext.getConversationReference(t1.activity);
-                    await t1.adapter.continueConversation(ref2, async (t2) => {
-                        await t2.sendActivity(message);
-                    });
-                });
-        });
-
-        await context.sendActivity(MessageFactory.text('All messages have been sent.'));
-    }
-
-    async getPagedMembers(context) {
-        var continuationToken;
-        var members = [];
-        do {
-            var pagedMembers = await TeamsInfo.getPagedMembers(context, 100, continuationToken);
-            continuationToken = pagedMembers.continuationToken;
-            members.push(...pagedMembers.members);
-        } while (continuationToken !== undefined);
-        return members;
+    async sendWelcomeCardAsync(context) {
+        await context.sendActivity(MessageFactory.text("Please type `analyze` to analyze the previous meeting."));
     }
 }
 
